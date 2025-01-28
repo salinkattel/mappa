@@ -1,6 +1,6 @@
-import Header from "./components/Header";
-import Sidebar from "./components/Sidebar";
-import Map from "./components/Map";
+import Header from "../components/reusables/Header";
+import Sidebar from "../components/reusables/Sidebar";
+import Map from "../components/main/Map";
 
 export default function TravelAdvicePage() {
   return (
