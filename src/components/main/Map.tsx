@@ -1,41 +1,92 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Layers } from "lucide-react";
+import React, { useState } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Circle,
+  Polygon,
+  Popup,
+  useMapEvents,
+} from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-export default function Map() {
-  const [zoom, setZoom] = useState(12);
+// Fix missing marker icons for React-Leaflet
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
+
+// Custom Component to Handle Map Clicks
+function LocationPopup() {
+  const [position, setPosition] = useState<L.LatLng | null>(null);
+
+  useMapEvents({
+    click(e) {
+      setPosition(e.latlng); // e.latlng is of type L.LatLng
+    },
+  });
+
+  return position ? (
+    <Popup position={position}>
+      <div>
+        You clicked at {position.lat.toFixed(4)}, {position.lng.toFixed(4)}
+      </div>
+    </Popup>
+  ) : null;
+}
+
+export default function MapExample() {
+  const center: [number, number] = [27.6953, 85.2776]; // acess coordinates
+  const polygonCoordinates: [number, number][] = [
+    [51.509, -0.08],
+    [51.503, -0.06],
+    [51.51, -0.047],
+  ];
 
   return (
-    <div className="relative w-full h-[calc(100vh-128px)] bg-gray-200 rounded-lg overflow-hidden">
-      <div className="absolute inset-0 bg-blue-100 flex items-center justify-center">
-        <span className="text-4xl font-bold text-blue-500">
-          Map Placeholder
-        </span>
-      </div>
-      <div className="absolute bottom-4 right-4 space-y-2">
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => setZoom(Math.min(zoom + 1, 20))}
+    <div className="w-full h-[calc(100vh-128px)]">
+      <MapContainer
+        center={center}
+        zoom={13}
+        style={{ height: "100%", width: "100%" }}
+      >
+        {/* Tile Layer */}
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+
+        {/* Marker */}
+        <Marker position={center}>
+          <Popup>
+            <b>Hello world!</b>
+            <br />I am a popup.
+          </Popup>
+        </Marker>
+
+        {/* <Circle
+          center={[51.508, -0.11]}
+          radius={500}
+          pathOptions={{ color: "red", fillColor: "#f03", fillOpacity: 0.5 }}
         >
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => setZoom(Math.max(zoom - 1, 1))}
-        >
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button variant="secondary" size="icon">
-          <Layers className="h-4 w-4" />
-        </Button>
-      </div>
-      <div className="absolute bottom-4 left-4 bg-white px-2 py-1 rounded-md shadow-md">
-        Zoom: {zoom}x
-      </div>
+          <Popup>I am a circle.</Popup>
+        </Circle> */}
+
+        {/* Polygon */}
+        {/* <Polygon positions={polygonCoordinates}>
+          <Popup>I am a polygon.</Popup>
+        </Polygon> */}
+
+        {/* Location Popup */}
+        <LocationPopup />
+      </MapContainer>
     </div>
   );
 }
