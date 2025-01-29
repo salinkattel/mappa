@@ -2,91 +2,52 @@
 
 import React, { useState } from "react";
 import {
-  MapContainer,
-  TileLayer,
+  GoogleMap,
+  LoadScript,
   Marker,
-  Circle,
-  Polygon,
-  Popup,
-  useMapEvents,
-} from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+  InfoWindow,
+} from "@react-google-maps/api";
 
-// Fix missing marker icons for React-Leaflet
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
+const center = { lat: 27.6953, lng: 85.2776 }; // Location coordinates
 
-// Custom Component to Handle Map Clicks
-function LocationPopup() {
-  const [position, setPosition] = useState<L.LatLng | null>(null);
+export default function GoogleMapsExample() {
+  const [selectedPosition, setSelectedPosition] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
 
-  useMapEvents({
-    click(e) {
-      setPosition(e.latlng); // e.latlng is of type L.LatLng
-    },
-  });
-
-  return position ? (
-    <Popup position={position}>
-      <div>
-        You clicked at {position.lat.toFixed(4)}, {position.lng.toFixed(4)}
-      </div>
-    </Popup>
-  ) : null;
-}
-
-export default function MapExample() {
-  const center: [number, number] = [27.6953, 85.2776]; // acess coordinates
-  const polygonCoordinates: [number, number][] = [
-    [51.509, -0.08],
-    [51.503, -0.06],
-    [51.51, -0.047],
-  ];
+  const handleMapClick = (event: google.maps.MapMouseEvent) => {
+    if (event.latLng) {
+      setSelectedPosition({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+    }
+  };
 
   return (
-    <div className="w-full h-[calc(100vh-128px)]">
-      <MapContainer
+    <LoadScript googleMapsApiKey={process.env.GOOGLE_MAP_API_KEY || ""}>
+      <GoogleMap
+        mapContainerStyle={{ width: "100%", height: "calc(100vh - 128px)" }}
         center={center}
         zoom={13}
-        style={{ height: "100%", width: "100%" }}
+        onClick={handleMapClick}
       >
-        {/* Tile Layer */}
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
+        {/* Default Marker */}
+        <Marker position={center} />
 
-        {/* Marker */}
-        <Marker position={center}>
-          <Popup>
-            <b>Hello world!</b>
-            <br />I am a popup.
-          </Popup>
-        </Marker>
-
-        {/* <Circle
-          center={[51.508, -0.11]}
-          radius={500}
-          pathOptions={{ color: "red", fillColor: "#f03", fillOpacity: 0.5 }}
-        >
-          <Popup>I am a circle.</Popup>
-        </Circle> */}
-
-        {/* Polygon */}
-        {/* <Polygon positions={polygonCoordinates}>
-          <Popup>I am a polygon.</Popup>
-        </Polygon> */}
-
-        {/* Location Popup */}
-        <LocationPopup />
-      </MapContainer>
-    </div>
+        {/* Clicked Location Marker */}
+        {selectedPosition && (
+          <Marker position={selectedPosition}>
+            <InfoWindow
+              position={selectedPosition}
+              onCloseClick={() => setSelectedPosition(null)}
+            >
+              <div>
+                You clicked at {selectedPosition.lat.toFixed(4)},{" "}
+                {selectedPosition.lng.toFixed(4)}
+              </div>
+            </InfoWindow>
+          </Marker>
+        )}
+      </GoogleMap>
+    </LoadScript>
   );
 }
