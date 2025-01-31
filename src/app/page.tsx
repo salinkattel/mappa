@@ -7,7 +7,6 @@ export default function TravelAdvicePage() {
     <div className="min-h-screen bg-gray-100">
       <Header />
       <div className="flex flex-col lg:flex-row">
-        <Sidebar />
         <main className="flex-grow p-4">
           <Map />
         </main>
