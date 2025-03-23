@@ -1,372 +1,693 @@
 "use client";
-import mapStyles from "../main/mapStyles.json";
-import React, { useState, useEffect, useRef } from "react";
-import { GoogleMap, LoadScript, Libraries } from "@react-google-maps/api";
 
-const libraries: Libraries = ["places"];
-const center = { lat: 27.6953, lng: 85.2776 };
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Star, X, Navigation, Clock } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-export default function GoogleMapsExample() {
+// Define types for our map component
+interface MapProps {
+  destinationCoords?: {
+    lat: number;
+    lng: number;
+  };
+  destinationName?: string;
+  rating?: number;
+  imageUrl?: string;
+}
+
+// Define a type for location details
+interface LocationDetails {
+  name: string;
+  description?: string;
+  image?: string;
+  rating?: number;
+  distance?: string;
+  duration?: string;
+  address?: string;
+  type?: string;
+}
+
+// Default coordinates for Kathmandu center
+const KATHMANDU_CENTER = {
+  lat: 27.7172,
+  lng: 85.324,
+};
+
+// Popular destinations with more details
+const POPULAR_DESTINATIONS = [
+  {
+    name: "Swayambhunath (Monkey Temple)",
+    lat: 27.7147,
+    lng: 85.2904,
+    image: "/swayambhunath.jpg",
+    rating: 4.8,
+    description:
+      "Also known as the Monkey Temple, this ancient religious complex sits atop a hill in the Kathmandu Valley and offers panoramic views of the city.",
+    type: "Religious Site",
+  },
+  {
+    name: "Boudhanath Stupa",
+    lat: 27.7215,
+    lng: 85.362,
+    image: "/boudha.jpg",
+    rating: 4.7,
+    description:
+      "One of the largest spherical stupas in Nepal, the Boudhanath dominates the skyline and is an UNESCO World Heritage Site.",
+    type: "Buddhist Monument",
+  },
+  {
+    name: "Pashupatinath Temple",
+    lat: 27.7109,
+    lng: 85.3486,
+    image: "/pashupati.jpg",
+    rating: 4.9,
+    description:
+      "A famous and sacred Hindu temple complex on the banks of the Bagmati River, dedicated to Lord Shiva.",
+    type: "Hindu Temple",
+  },
+  {
+    name: "Thamel",
+    lat: 27.7154,
+    lng: 85.3123,
+    image: "/thamel.jpg",
+    rating: 4.5,
+    description:
+      "A commercial neighborhood in Kathmandu, a tourist hub with numerous shops, restaurants, and hotels.",
+    type: "Tourist District",
+  },
+  {
+    name: "Durbar Square",
+    lat: 27.7048,
+    lng: 85.3068,
+    image: "/durbar.jpg",
+    rating: 4.6,
+    description:
+      "A plaza in front of the old royal palace, showcasing spectacular architecture and intricate wood, metal and stone artistry.",
+    type: "UNESCO World Heritage Site",
+  },
+];
+
+// Declare google as a global variable
+declare global {
+  interface Window {
+    google: any;
+    googleMapsLoaded: boolean;
+    initMap: () => void;
+  }
+}
+
+// Create a global flag to track if the script is already being loaded
+let isScriptLoading = false;
+
+export default function Map({
+  destinationCoords,
+  destinationName,
+  rating,
+  imageUrl,
+}: MapProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const scriptTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directionsRenderer, setDirectionsRenderer] =
+    useState<google.maps.DirectionsRenderer | null>(null);
+  const [travelMode, setTravelMode] = useState<string>("DRIVING");
+  const [selectedLocation, setSelectedLocation] =
+    useState<LocationDetails | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{
+    distance?: string;
+    duration?: string;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lng: number;
-  } | null>(null);
-  const [restaurants, setRestaurants] = useState<
-    google.maps.places.PlaceResult[]
-  >([]);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
-  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  }>(KATHMANDU_CENTER);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
+  // Get user's real location
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setUserLocation({
+          const userCoords = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
-          });
+          };
+          console.log("User location obtained:", userCoords);
+          setUserLocation(userCoords);
         },
         (error) => {
-          console.error("Error fetching user location:", error);
+          console.error("Error getting user location:", error.message);
+          setLocationError(
+            `Could not get your location: ${error.message}. Using default location instead.`
+          );
+          // Keep using the default location
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0,
         }
+      );
+    } else {
+      console.warn("Geolocation is not supported by this browser");
+      setLocationError(
+        "Geolocation is not supported by your browser. Using default location instead."
       );
     }
   }, []);
-  const fetchNearbyPlaces = () => {
-    if (!mapRef.current || !userLocation) return;
 
-    const service = new google.maps.places.PlacesService(mapRef.current);
-    const request = {
-      location: userLocation,
-      radius: 2000,
-      type: "restaurant",
-    };
-    new google.maps.Marker({
-      position: userLocation,
-      map: mapRef.current!,
-      title: "User Location",
-    });
+  // Initialize the map
+  useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-    service.nearbySearch(request, (results, status) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        setRestaurants(results);
-        addMarkers(results);
-      }
-    });
-  };
+    // Function to initialize the map
+    const initializeMap = () => {
+      if (!mapRef.current) return;
 
-  const addMarkers = (places: google.maps.places.PlaceResult[]) => {
-    if (!mapRef.current) return;
-
-    markersRef.current.forEach((marker) => marker.setMap(null));
-    markersRef.current = [];
-
-    places.forEach((place) => {
-      if (place.geometry?.location) {
-        const marker = new google.maps.Marker({
-          position: place.geometry.location,
-          map: mapRef.current!,
-          title: place.name || "Unnamed Place",
+      try {
+        const mapInstance = new window.google.maps.Map(mapRef.current, {
+          center: userLocation,
+          zoom: 13,
+          mapTypeId: window.google.maps.MapTypeId.ROADMAP,
+          mapTypeControl: true,
+          fullscreenControl: true,
+          streetViewControl: true,
+          zoomControl: true,
+          styles: [
+            {
+              featureType: "water",
+              elementType: "geometry",
+              stylers: [{ color: "#193341" }],
+            },
+            {
+              featureType: "landscape",
+              elementType: "geometry",
+              stylers: [{ color: "#2c5a71" }],
+            },
+            {
+              featureType: "road",
+              elementType: "geometry",
+              stylers: [{ color: "#29768a" }, { lightness: -37 }],
+            },
+            {
+              featureType: "poi",
+              elementType: "geometry",
+              stylers: [{ color: "#406d80" }],
+            },
+            {
+              featureType: "transit",
+              elementType: "geometry",
+              stylers: [{ color: "#406d80" }],
+            },
+            {
+              elementType: "labels.text.stroke",
+              stylers: [
+                { visibility: "on" },
+                { color: "#3e606f" },
+                { weight: 2 },
+              ],
+            },
+            {
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#ffffff" }],
+            },
+          ],
         });
 
-        marker.addListener("click", () => handleRestaurantClick(marker, place));
-        markersRef.current.push(marker);
-      }
-    });
-  };
+        // Create directions renderer
+        const directionsRendererInstance =
+          new window.google.maps.DirectionsRenderer({
+            map: mapInstance,
+            suppressMarkers: false,
+            polylineOptions: {
+              strokeColor: "red",
+              strokeWeight: 5,
+              strokeOpacity: 0.8,
+            },
+          });
 
-  const handleRestaurantClick = (
-    marker: google.maps.Marker,
-    place: google.maps.places.PlaceResult
-  ) => {
-    if (!mapRef.current || !place.geometry?.location) return;
+        setMap(mapInstance);
+        setDirectionsRenderer(directionsRendererInstance);
 
-    const targetLocation = place.geometry.location;
-    const currentCenter = mapRef.current.getCenter();
-    if (!currentCenter) return;
+        // Add user location marker
+        new window.google.maps.Marker({
+          position: userLocation,
+          map: mapInstance,
+          title: "Your Location",
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: "#4ade80",
+            fillOpacity: 1,
+            strokeWeight: 2,
+            strokeColor: "#ffffff",
+          },
+        });
 
-    const offsetLat = targetLocation.lat() + 0.0015;
-    const offsetLocation = new google.maps.LatLng(
-      offsetLat,
-      targetLocation.lng()
-    );
-
-    const distance = calculateDistance(currentCenter, offsetLocation);
-    const steps = Math.min(50, Math.max(30, Math.floor(distance * 1000)));
-    const interval = 30;
-    let step = 0;
-
-    const animatePan = () => {
-      if (!mapRef.current || !currentCenter) return;
-
-      const latStep =
-        (offsetLocation.lat() - currentCenter.lat()) / (steps - step);
-      const lngStep =
-        (offsetLocation.lng() - currentCenter.lng()) / (steps - step);
-
-      mapRef.current.panTo({
-        lat: currentCenter.lat() + latStep,
-        lng: currentCenter.lng() + lngStep,
-      });
-
-      step++;
-      if (step < steps) {
-        setTimeout(animatePan, interval);
-      } else {
-        mapRef.current.setZoom(18);
-        showInfoWindow(marker, place);
-      }
-    };
-
-    animatePan();
-  };
-
-  const calculateDistance = (
-    point1: google.maps.LatLng,
-    point2: google.maps.LatLng
-  ): number => {
-    const R = 6371; // Radius of the Earth in km
-    const lat1 = (point1.lat() * Math.PI) / 180;
-    const lat2 = (point2.lat() * Math.PI) / 180;
-    const deltaLat = ((point2.lat() - point1.lat()) * Math.PI) / 180;
-    const deltaLng = ((point2.lng() - point1.lng()) * Math.PI) / 180;
-
-    const a =
-      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-      Math.cos(lat1) *
-        Math.cos(lat2) *
-        Math.sin(deltaLng / 2) *
-        Math.sin(deltaLng / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in km
-  };
-
-  const showInfoWindow = (
-    marker: google.maps.Marker,
-    place: google.maps.places.PlaceResult
-  ) => {
-    if (!infoWindowRef.current || !userLocation || !place.geometry?.location)
-      return;
-
-    const placeLocation = place.geometry.location;
-    const userLatLng = new google.maps.LatLng(
-      userLocation.lat,
-      userLocation.lng
-    );
-    const placeLatLng = new google.maps.LatLng(
-      placeLocation.lat(),
-      placeLocation.lng()
-    );
-
-    const distanceFromUser = calculateDistance(userLatLng, placeLatLng);
-
-    const service = new google.maps.places.PlacesService(mapRef.current!);
-    const townSquareRequest = {
-      location: placeLocation,
-      radius: 5000,
-      type: "townsquare",
-    };
-
-    service.nearbySearch(townSquareRequest, (results, status) => {
-      let distanceFromHighway = 10;
-
-      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const nearestHighway = results[0];
-        if (nearestHighway?.geometry?.location) {
-          const highwayLatLng = new google.maps.LatLng(
-            nearestHighway.geometry.location.lat(),
-            nearestHighway.geometry.location.lng()
-          );
-          distanceFromHighway = calculateDistance(placeLatLng, highwayLatLng);
+        // Only add popular destinations if no specific destination is provided
+        if (!destinationName) {
+          addPopularDestinationsMarkers(mapInstance);
         }
+      } catch (err) {
+        console.error("Error initializing map:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Define a global callback function for the script
+    window.initMap = () => {
+      window.googleMapsLoaded = true;
+      isScriptLoading = false;
+
+      // Clear the timeout using the ref
+      if (scriptTimeoutRef.current) {
+        clearTimeout(scriptTimeoutRef.current);
+        scriptTimeoutRef.current = null;
       }
 
-      const difficultyScore =
-        3 * distanceFromUser +
-        1 * distanceFromHighway +
-        1 * (5 - (place.rating || 0));
+      initializeMap();
+    };
 
-      let difficulty = "Unknown";
-      let difficultyColor = "#888";
-
-      if (difficultyScore < 10) {
-        difficulty = "Easy";
-        difficultyColor = "#4CAF50";
-      } else if (difficultyScore < 20) {
-        difficulty = "Moderate";
-        difficultyColor = "#FFC107";
-      } else {
-        difficulty = "Hard";
-        difficultyColor = "#F44336";
+    // Load Google Maps script using Google's recommended approach
+    const loadGoogleMapsScript = () => {
+      // If script is already loaded, initialize map directly
+      if (window.google && window.google.maps) {
+        initializeMap();
+        return;
       }
 
-      const fullStars = Math.floor(place.rating || 0);
-      const hasHalfStar = (place.rating || 0) % 1 !== 0;
-      let starRating = "⭐".repeat(fullStars);
-      if (hasHalfStar) starRating += "✰";
+      // If script is already being loaded, wait for it
+      if (isScriptLoading) {
+        const checkIfLoaded = setInterval(() => {
+          if (window.googleMapsLoaded) {
+            clearInterval(checkIfLoaded);
+            initializeMap();
+          }
+        }, 100);
+        return;
+      }
 
-      const photoUrl =
-        place.photos?.[0]?.getUrl?.({ maxWidth: 350, maxHeight: 200 }) ||
-        "https://maps.gstatic.com/tactile/pane/default_geocode-2x.png";
+      // Otherwise, load the script using Google's recommended approach
+      isScriptLoading = true;
 
-      const content = `
-      <div style="
-        background: #222831; 
-        color: #EEEEEE;
-        font-family: 'Arial', sans-serif;
-        padding: 12px;
-        border-radius: 8px;
-        box-shadow: 0px 4px 10px rgba(0, 173, 181, 0.3);
-        max-width: 350px;
-      ">
-        <img 
-          src="${photoUrl}"
-          alt="${place.name || "Restaurant"}"
-          style="
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            border-radius: 4px;
-            margin-bottom: 12px;
-          "
-        />
-        <h3 style="margin: 0; font-size: 18px; color: #00ADB5;">${
-          place.name || "Unnamed Place"
-        }</h3>
-        
-        <div style="display: flex; justify-content: space-between;">
-          <span style="color: #FFC107; font-size: 16px;">${starRating} (${
-        place.rating || "N/A"
-      })</span>
-          <span style="
-            background: ${difficultyColor};
-            color: #222;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-          ">${difficulty} Difficulty</span>
-        </div>
+      // Remove any existing script tags to avoid duplicates
+      const existingScripts = document.querySelectorAll(
+        'script[src*="maps.googleapis.com"]'
+      );
+      existingScripts.forEach((script) => script.remove());
 
-        <p style="margin: 5px 0; font-size: 14px;">Distance from You: ${distanceFromUser.toFixed(
-          2
-        )} km</p>
-        <p style="margin: 5px 0; font-size: 14px;">Distance from Highway: ${distanceFromHighway.toFixed(
-          2
-        )} km</p>
+      // Create a new script element
+      const googleMapsScript = document.createElement("script");
 
-        <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          place.name || "Restaurant"
-        )}&query_place_id=${place.place_id}" target="_blank" style="
-          display: inline-block;
-          margin-top: 8px;
-          padding: 6px 12px;
-          font-size: 14px;
-          color: #222831;
-          background: #00ADB5;
-          text-decoration: none;
-          border-radius: 4px;
-          font-weight: bold;
-        ">Plan trip</a>
-      </div>
-    `;
+      // Set the script attributes according to Google's best practices
+      googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initMap&loading=async`;
+      googleMapsScript.async = true;
+      googleMapsScript.defer = true;
 
-      infoWindowRef.current!.setContent(content);
-      infoWindowRef.current!.open(mapRef.current, marker);
-    });
-  };
-  useEffect(() => {
-    if (mapRef.current && userLocation) {
-      fetchNearbyPlaces();
-    }
+      // Append the script to the document head
+      document.head.appendChild(googleMapsScript);
+
+      // Store the timeout ID in the ref so it can be accessed from window.initMap
+      scriptTimeoutRef.current = setTimeout(() => {
+        if (isScriptLoading) {
+          isScriptLoading = false;
+        }
+      }, 10000); // 10 second timeout
+    };
+
+    loadGoogleMapsScript();
+
+    return () => {
+      if (scriptTimeoutRef.current) {
+        clearTimeout(scriptTimeoutRef.current);
+      }
+    };
   }, [userLocation]);
 
-  return (
-    <LoadScript
-      googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAP_API_KEY || ""}
-      libraries={libraries}
-    >
-      <div
-        style={{
-          display: "flex",
-          height: "calc(100vh - 64px)",
-          backgroundColor: "#f8f9fa",
-        }}
-      >
-        <div
-          style={{
-            width: "300px",
-            background: "#222831",
-            padding: "15px",
-            overflowY: "scroll",
-            borderRight: "2px solid #393E46",
-            color: "#EEEEEE",
-            boxShadow: "2px 0px 10px rgba(0, 0, 0, 0.2)",
-          }}
-        >
-          <h3
-            style={{
-              color: "#00ADB5",
-              marginBottom: "10px",
-              textAlign: "center",
-            }}
-          >
-            Nearby Restaurants
-          </h3>
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {restaurants.map((place) => (
-              <li
-                key={place.place_id}
-                style={{
-                  marginBottom: "12px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background: "#393E46",
-                  cursor: "pointer",
-                  transition: "0.3s",
-                  boxShadow: "2px 2px 5px rgba(0, 0, 0, 0.2)",
-                }}
-                onClick={() => {
-                  const marker = markersRef.current.find(
-                    (m) => m.getTitle() === place.name
-                  );
-                  if (marker) {
-                    handleRestaurantClick(marker, place);
-                  }
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#00ADB5")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "#393E46")
-                }
-              >
-                <strong style={{ color: "#EEEEEE" }}>
-                  {place.name || "Unnamed Place"}
-                </strong>
-                <br />
-                <span style={{ color: "#00ADB5" }}>{place.vicinity}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+  // Calculate and display route when destination coordinates change
+  useEffect(() => {
+    if (
+      !map ||
+      !directionsRenderer ||
+      !destinationCoords ||
+      !window.google ||
+      !window.google.maps
+    )
+      return;
 
-        <GoogleMap
-          mapContainerStyle={{ flexGrow: 1 }}
-          center={userLocation || center}
-          zoom={13}
-          options={{ disableDefaultUI: false, styles: mapStyles }}
-          onLoad={(map) => {
-            mapRef.current = map;
-            // Initialize InfoWindow only after Google Maps is loaded
-            if (!infoWindowRef.current) {
-              infoWindowRef.current = new google.maps.InfoWindow();
+    const directionsService = new window.google.maps.DirectionsService();
+
+    // Convert string travelMode to Google Maps TravelMode enum
+    const googleTravelMode =
+      window.google.maps.TravelMode[
+        travelMode as keyof typeof window.google.maps.TravelMode
+      ];
+
+    directionsService.route(
+      {
+        origin: userLocation,
+        destination: destinationCoords,
+        travelMode: googleTravelMode,
+        provideRouteAlternatives: true,
+        optimizeWaypoints: true,
+      },
+      (
+        result: google.maps.DirectionsResult | null,
+        status: google.maps.DirectionsStatus
+      ) => {
+        if (status === window.google.maps.DirectionsStatus.OK && result) {
+          directionsRenderer.setDirections(result);
+
+          // Fit map to show the entire route
+          const bounds = new window.google.maps.LatLngBounds();
+          bounds.extend(userLocation);
+          bounds.extend(destinationCoords);
+          map.fitBounds(bounds);
+
+          // Update route info
+          setRouteInfo({
+            distance: result.routes[0].legs[0].distance?.text,
+            duration: result.routes[0].legs[0].duration?.text,
+          });
+
+          // Find destination details
+          if (destinationName) {
+            const destinationInfo = POPULAR_DESTINATIONS.find(
+              (dest) => dest.name === destinationName
+            );
+
+            // Create location details
+            setSelectedLocation({
+              name: destinationName,
+              distance: result.routes[0].legs[0].distance?.text,
+              duration: result.routes[0].legs[0].duration?.text,
+              image: imageUrl,
+              rating: rating,
+              description: destinationInfo?.description,
+              type: destinationInfo?.type,
+            });
+
+            // Add destination marker
+            const destinationMarker = new window.google.maps.Marker({
+              position: destinationCoords,
+              map: map,
+              title: destinationName,
+            });
+          }
+        } else {
+          console.error("Directions request failed:", status);
+        }
+      }
+    );
+  }, [
+    destinationCoords,
+    destinationName,
+    map,
+    directionsRenderer,
+    travelMode,
+    userLocation,
+    rating,
+    imageUrl,
+  ]);
+
+  // Add popular destinations markers
+  const addPopularDestinationsMarkers = (mapInstance: google.maps.Map) => {
+    POPULAR_DESTINATIONS.forEach((destination) => {
+      const marker = new window.google.maps.Marker({
+        position: { lat: destination.lat, lng: destination.lng },
+        map: mapInstance,
+        title: destination.name,
+        animation: window.google.maps.Animation.DROP,
+      });
+
+      marker.addListener("click", () => {
+        // Set selected location
+        setSelectedLocation({
+          name: destination.name,
+          image: destination.image,
+          rating: destination.rating,
+          description: destination.description,
+          type: destination.type,
+        });
+
+        // Calculate route to this destination
+        if (window.google && window.google.maps) {
+          const directionsService = new window.google.maps.DirectionsService();
+          const googleTravelMode =
+            window.google.maps.TravelMode[
+              travelMode as keyof typeof window.google.maps.TravelMode
+            ];
+
+          directionsService.route(
+            {
+              origin: userLocation,
+              destination: { lat: destination.lat, lng: destination.lng },
+              travelMode: googleTravelMode,
+            },
+            (
+              result: google.maps.DirectionsResult | null,
+              status: google.maps.DirectionsStatus
+            ) => {
+              if (status === window.google.maps.DirectionsStatus.OK && result) {
+                if (directionsRenderer) {
+                  directionsRenderer.setDirections(result);
+                }
+
+                // Update route info
+                setRouteInfo({
+                  distance: result.routes[0].legs[0].distance?.text,
+                  duration: result.routes[0].legs[0].duration?.text,
+                });
+
+                // Update selected location with route info
+                setSelectedLocation((prev) => ({
+                  ...prev!,
+                  distance: result.routes[0].legs[0].distance?.text,
+                  duration: result.routes[0].legs[0].duration?.text,
+                }));
+
+                // Fit map to show the entire route
+                const bounds = new window.google.maps.LatLngBounds();
+                bounds.extend(userLocation);
+                bounds.extend({ lat: destination.lat, lng: destination.lng });
+                mapInstance.fitBounds(bounds);
+              }
             }
-          }}
-        />
+          );
+        }
+      });
+    });
+  };
+
+  // Change travel mode
+  const changeTravelMode = (mode: string) => {
+    setTravelMode(mode);
+
+    // Recalculate route if a location is selected
+    if (selectedLocation && map && directionsRenderer) {
+      const destination = POPULAR_DESTINATIONS.find(
+        (dest) => dest.name === selectedLocation.name
+      );
+
+      if (destination && window.google && window.google.maps) {
+        const directionsService = new window.google.maps.DirectionsService();
+        const googleTravelMode =
+          window.google.maps.TravelMode[
+            mode as keyof typeof window.google.maps.TravelMode
+          ];
+
+        directionsService.route(
+          {
+            origin: userLocation,
+            destination: { lat: destination.lat, lng: destination.lng },
+            travelMode: googleTravelMode,
+          },
+          (
+            result: google.maps.DirectionsResult | null,
+            status: google.maps.DirectionsStatus
+          ) => {
+            if (status === window.google.maps.DirectionsStatus.OK && result) {
+              directionsRenderer.setDirections(result);
+
+              // Update route info
+              setRouteInfo({
+                distance: result.routes[0].legs[0].distance?.text,
+                duration: result.routes[0].legs[0].duration?.text,
+              });
+
+              // Update selected location with new route info
+              setSelectedLocation((prev) => ({
+                ...prev!,
+                distance: result.routes[0].legs[0].distance?.text,
+                duration: result.routes[0].legs[0].duration?.text,
+              }));
+            }
+          }
+        );
+      }
+    }
+  };
+
+  return (
+    <div className="h-full flex">
+      {/* Location error notification */}
+      {locationError && (
+        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-50 bg-amber-600 text-white px-4 py-2 rounded-md text-sm shadow-lg">
+          <p>{locationError}</p>
+        </div>
+      )}
+
+      {/* Sidebar for location details */}
+      {selectedLocation && (
+        <div className="w-80 h-full bg-slate-800 border-r border-teal-900/50 overflow-y-auto">
+          <Card className="border-0 rounded-none bg-transparent text-white">
+            <CardHeader className="relative pb-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-4 top-4 text-white hover:bg-white/10 z-10"
+                onClick={() => setSelectedLocation(null)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+
+              <div className="relative h-48 -mx-6 -mt-6 mb-4">
+                <img
+                  src={
+                    selectedLocation.image ||
+                    `/placeholder.svg?height=200&width=320`
+                  }
+                  alt={selectedLocation.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+
+                {selectedLocation.type && (
+                  <Badge className="absolute top-4 left-4 bg-teal-600">
+                    {selectedLocation.type}
+                  </Badge>
+                )}
+
+                {selectedLocation.rating && (
+                  <div className="absolute top-4 right-12 flex items-center bg-black/50 rounded-full px-2 py-1">
+                    <Star className="h-3.5 w-3.5 text-amber-400 mr-1 fill-amber-400" />
+                    <span className="text-xs font-medium">
+                      {selectedLocation.rating}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <CardTitle className="text-xl mb-1">
+                {selectedLocation.name}
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {selectedLocation.description && (
+                <p className="text-sm text-white/80">
+                  {selectedLocation.description}
+                </p>
+              )}
+
+              {(selectedLocation.distance || selectedLocation.duration) && (
+                <div className="bg-slate-700/50 rounded-lg p-3 space-y-2">
+                  <h4 className="text-sm font-medium text-teal-400">
+                    Route Information
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedLocation.distance && (
+                      <div className="flex items-center text-sm">
+                        <Navigation className="h-4 w-4 mr-2 text-white/60" />
+                        <span>{selectedLocation.distance}</span>
+                      </div>
+                    )}
+
+                    {selectedLocation.duration && (
+                      <div className="flex items-center text-sm">
+                        <Clock className="h-4 w-4 mr-2 text-white/60" />
+                        <span>{selectedLocation.duration}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2">
+                <h4 className="text-sm font-medium text-teal-400 mb-2">
+                  Travel Mode
+                </h4>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={travelMode === "DRIVING" ? "default" : "outline"}
+                    className={
+                      travelMode === "DRIVING"
+                        ? "bg-teal-600"
+                        : "border-teal-500 text-teal-400"
+                    }
+                    onClick={() => changeTravelMode("DRIVING")}
+                  >
+                    Driving
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={travelMode === "WALKING" ? "default" : "outline"}
+                    className={
+                      travelMode === "WALKING"
+                        ? "bg-teal-600"
+                        : "border-teal-500 text-teal-400"
+                    }
+                    onClick={() => changeTravelMode("WALKING")}
+                  >
+                    Walking
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Map container */}
+      <div className="flex-1 flex flex-col">
+        {!selectedLocation && destinationCoords && (
+          <div className="bg-slate-800 p-3 border-b border-teal-900/50">
+            <div className="flex flex-wrap gap-2 justify-center">
+              <Button
+                size="sm"
+                variant={travelMode === "DRIVING" ? "default" : "outline"}
+                className={
+                  travelMode === "DRIVING"
+                    ? "bg-teal-600"
+                    : "border-teal-500 text-teal-400"
+                }
+                onClick={() => changeTravelMode("DRIVING")}
+              >
+                Driving
+              </Button>
+              <Button
+                size="sm"
+                variant={travelMode === "WALKING" ? "default" : "outline"}
+                className={
+                  travelMode === "WALKING"
+                    ? "bg-teal-600"
+                    : "border-teal-500 text-teal-400"
+                }
+                onClick={() => changeTravelMode("WALKING")}
+              >
+                Walking
+              </Button>
+            </div>
+          </div>
+        )}
+        <div ref={mapRef} className="flex-1 w-full h-full" />
       </div>
-    </LoadScript>
+    </div>
   );
 }
