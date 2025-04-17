@@ -218,7 +218,7 @@ export default function TravelAdvicePage() {
 
                 <TabsContent value="shorttrips">
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {destinations.shorttrips.map((trek) => (
+                    {destinations.shorttrips.slice(0, 3).map((trek) => (
                       <Card
                         key={trek.id}
                         className="bg-slate-800/30 backdrop-blur-md border-teal-900/50 overflow-hidden group hover:border-teal-500/50 transition-all duration-300"
@@ -285,7 +285,7 @@ export default function TravelAdvicePage() {
                 </TabsContent>
                 <TabsContent value="trekking">
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {destinations.trekking.map((trek) => (
+                    {destinations.trekking.slice(0, 3).map((trek) => (
                       <Card
                         key={trek.id}
                         className="bg-slate-800/30 backdrop-blur-md border-teal-900/50 overflow-hidden group hover:border-teal-500/50 transition-all duration-300"
@@ -354,7 +354,7 @@ export default function TravelAdvicePage() {
 
                 <TabsContent value="cultural">
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {destinations.cultural.map((site) => (
+                    {destinations.cultural.slice(0,3).map((site) => (
                       <Card
                         key={site.id}
                         className="bg-slate-800/30 backdrop-blur-md border-teal-900/50 overflow-hidden group hover:border-teal-500/50 transition-all duration-300"

@@ -57,6 +57,76 @@ export const destinations = {
         lng: 85.2,
       },
     },
+    {
+      id: "switzerland-danda",
+      name: "Switzerland Danda",
+      description:
+        "A scenic hilltop known for its breathtaking views, lush greenery, and resemblance to Swiss landscapes.",
+      bestTime: "October to April",
+      estimatedTime: "1 day",
+      rating: 4.8,
+      imageUrl: "switzerland-danda.jpg",
+      coordinates: {
+        lat: 27.9,
+        lng: 85.6,
+      },
+    },
+    {
+      id: "glass-house-nagarkot",
+      name: "Glass House Nagarkot",
+      description:
+        "A luxurious retreat with glass walls offering stunning sunrise and sunset views over the Himalayas.",
+      bestTime: "September to March",
+      estimatedTime: "1-2 days",
+      rating: 4.9,
+      imageUrl: "glass-house-nagarkot.jpg",
+      coordinates: {
+        lat: 27.725,
+        lng: 85.524,
+      },
+    },
+    {
+      id: "kakani",
+      name: "Kakani",
+      description:
+        "A peaceful hill station famous for its strawberry farms and sweeping views of Langtang Himal.",
+      bestTime: "October to April",
+      estimatedTime: "Half-day to 1 day",
+      rating: 4.6,
+      imageUrl: "kakani.jpg",
+      coordinates: {
+        lat: 27.8341,
+        lng: 85.1833,
+      },
+    },
+    {
+      id: "namobuddha",
+      name: "Namobuddha",
+      description:
+        "A sacred Buddhist pilgrimage site with a serene monastery and mountain backdrop.",
+      bestTime: "September to May",
+      estimatedTime: "1 day",
+      rating: 4.7,
+      imageUrl: "namobuddha.jpg",
+      coordinates: {
+        lat: 27.5733,
+        lng: 85.5431,
+      },
+    },
+    {
+      id: "phulchowki",
+      name: "Phulchowki",
+      description:
+        "The highest hill surrounding Kathmandu Valley, known for rhododendron forests and birdwatching.",
+      bestTime: "October to March",
+      estimatedTime: "1 day",
+      rating: 4.5,
+      imageUrl: "phulchowki.jpg",
+      coordinates: {
+        lat: 27.5675,
+        lng: 85.405,
+      },
+    },
   ],
   trekking: [
     {
